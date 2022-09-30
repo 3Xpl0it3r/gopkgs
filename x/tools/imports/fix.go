@@ -12,6 +12,7 @@ import (
 	"go/build"
 	"go/parser"
 	"go/token"
+	"golang.org/x/mod/modfile"
 	"io/ioutil"
 	"log"
 	"os"
@@ -492,28 +493,38 @@ var scanGoRootDone = make(chan struct{}) // closed when scanGoRoot is done
 
 func scanGoRoot() {
 	go func() {
-		scanGoDirs(true, nil)
+		scanGoDirs(true, "", nil)
 		close(scanGoRootDone)
 	}()
 }
 
-func scanGoPath() { scanGoDirs(false, nil) }
+func scanGoPath() { scanGoDirs(false, "", nil) }
 
 func scanGoMod() {
 	curDir, err := os.Getwd()
 	if err != nil {
 		return
 	}
-	if rootDir, ok := findGoModPath(curDir); ok {
-		scanGoDirs(false, []string{rootDir})
+	rootDir, ok := findGoModPath(curDir)
+	if !ok {
+		return
 	}
+	fileRaw, err := ioutil.ReadFile(path.Join(rootDir, "go.mod"))
+	if err != nil {
+		return
+	}
+	f, err := modfile.Parse("go.mod", fileRaw, nil)
+	if err != nil {
+		panic(err)
+	}
+	scanGoDirs(false, f.Module.Mod.String(), []string{rootDir})
 }
 
 func scanGoWorkspace() {
 
 }
 
-func scanGoDirs(goRoot bool, extPath []string) {
+func scanGoDirs(goRoot bool, goMod string, extPath []string) {
 	if Debug {
 		which := "$GOROOT"
 		if !goRoot {
@@ -556,9 +567,13 @@ func scanGoDirs(goRoot bool, extPath []string) {
 				if _, dup := dirScan[dir]; !dup {
 					importpath := filepath.ToSlash(dir[len(srcDir)+len("/"):])
 					dirScan[dir] = &pkg{
-						importPath:      importpath,
-						importPathShort: vendorlessImportPath(importpath),
-						dir:             dir,
+						importPath: importpath,
+						dir:        dir,
+					}
+					if importPathShort, isVendor := vendorlessImportPath(importpath); isVendor || goMod == "" {
+						dirScan[dir].importPathShort = importPathShort
+					} else {
+						dirScan[dir].importPathShort = goMod + "/" + importPathShort
 					}
 				}
 				dirScanMu.Unlock()
@@ -604,15 +619,15 @@ func scanGoDirs(goRoot bool, extPath []string) {
 
 // vendorlessImportPath returns the devendorized version of the provided import path.
 // e.g. "foo/bar/vendor/a/b" => "a/b"
-func vendorlessImportPath(ipath string) string {
+func vendorlessImportPath(ipath string) (string, bool) {
 	// Devendorize for use in import statement.
 	if i := strings.LastIndex(ipath, "/vendor/"); i >= 0 {
-		return ipath[i+len("/vendor/"):]
+		return ipath[i+len("/vendor/"):], true
 	}
 	if strings.HasPrefix(ipath, "vendor/") {
-		return ipath[len("vendor/"):]
+		return ipath[len("vendor/"):], true
 	}
-	return ipath
+	return ipath, false
 }
 
 // loadExports returns the set of exported symbols in the package at dir.
@@ -1010,9 +1025,6 @@ func findGoModPath(path string) (string, bool) {
 	}
 	for _, fi := range rd {
 		if strings.Compare(fi.Name(), "go.mod") == 0 {
-			return path, true
-		}
-		if strings.Compare(fi.Name(), ".git") == 0 {
 			return path, true
 		}
 	}

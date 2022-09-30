@@ -1,20 +1,15 @@
 package main
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"github.com/3Xpl0it3r/gopkgs"
 	"os"
 	"sort"
 	"strings"
-	"text/template"
 )
 
 var (
-	fullpath    = flag.Bool("fullpath", false, `output absolute file path to package directory. ("/usr/lib/go/src/net/http")`)
-	short       = flag.Bool("short", true, `output vendorless import path ("net/http", "foo/bar/vendor/a/b")`)
-	f           = flag.String("f", "", "alternate format for the output using the syntax of template package. e.g. {{.Name}};{{ImportPathShort}}")
 	includeName = flag.Bool("include-name", false, "fill Pkg.Name which can be used with -f flag")
 	noVendor    = flag.Bool("no-vendor", false, "exclude vendor dependencies except under workDir ")
 )
@@ -105,39 +100,14 @@ func main() {
 		os.Exit(2)
 	}
 
-	tplFormat := "{{.ImportPath}}"
-	if *f != "" {
-		tplFormat = *f
-	} else if *fullpath {
-		tplFormat = "{{.Dir}}"
-	} else if *short {
-		tplFormat = "{{.ImportPathShort}}"
-	}
-
-	tpl, err := template.New("out").Parse(tplFormat)
-	if err != nil {
-		fmt.Fprintln(os.Stderr)
-		os.Exit(2)
-	}
-
-	w := bufio.NewWriter(os.Stdout)
-	defer w.Flush()
 	opt := gopkgs.DefaultOption()
 	opt.IncludeName = *includeName
 	pkgs := gopkgs.Packages(opt)
-	if *fullpath {
-		sort.Sort(ByFullPath(pkgs))
-		// Fullpaths is already unique
-	} else if *short {
-		sort.Sort(ByShortPath(pkgs))
-		pkgs = uniq(pkgs, func(p *gopkgs.Pkg) string { return p.ImportPathShort })
-	} else {
-		sort.Sort(ByPath(pkgs))
-		pkgs = uniq(pkgs, func(p *gopkgs.Pkg) string { return p.ImportPath })
-	}
+
+	sort.Sort(ByPath(pkgs))
+	pkgs = uniq(pkgs, func(p *gopkgs.Pkg) string { return p.ImportPath })
 
 	for _, pkg := range pkgs {
-		tpl.Execute(w, pkg)
-		fmt.Fprintln(w)
+		fmt.Fprintln(os.Stdout, pkg.ImportPathShort)
 	}
 }
