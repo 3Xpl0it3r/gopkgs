@@ -4,12 +4,11 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
+	"github.com/3Xpl0it3r/gopkgs"
 	"os"
 	"sort"
 	"strings"
 	"text/template"
-
-	"github.com/haya14busa/gopkgs"
 )
 
 var (
@@ -17,6 +16,7 @@ var (
 	short       = flag.Bool("short", true, `output vendorless import path ("net/http", "foo/bar/vendor/a/b")`)
 	f           = flag.String("f", "", "alternate format for the output using the syntax of template package. e.g. {{.Name}};{{ImportPathShort}}")
 	includeName = flag.Bool("include-name", false, "fill Pkg.Name which can be used with -f flag")
+	noVendor    = flag.Bool("no-vendor", false, "exclude vendor dependencies except under workDir ")
 )
 
 var usageInfo = `
@@ -122,11 +122,9 @@ func main() {
 
 	w := bufio.NewWriter(os.Stdout)
 	defer w.Flush()
-
 	opt := gopkgs.DefaultOption()
 	opt.IncludeName = *includeName
 	pkgs := gopkgs.Packages(opt)
-
 	if *fullpath {
 		sort.Sort(ByFullPath(pkgs))
 		// Fullpaths is already unique

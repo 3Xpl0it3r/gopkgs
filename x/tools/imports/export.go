@@ -19,6 +19,7 @@ func GoPath() map[string]*Pkg {
 	populateIgnoreOnce.Do(populateIgnore)
 	scanGoRootOnce.Do(scanGoRoot) // async
 	scanGoPathOnce.Do(scanGoPath)
+	scanGoModPathOnce.Do(scanGoMod)
 	<-scanGoRootDone
 	dirScanMu.Lock()
 	defer dirScanMu.Unlock()

@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/haya14busa/gopkgs/x/tools/imports"
+	"github.com/3Xpl0it3r/gopkgs/x/tools/imports"
 )
 
 // Pkg represents exported go packages.

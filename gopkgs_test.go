@@ -1,6 +1,8 @@
 package gopkgs
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestPackages(t *testing.T) {
 	pkgs := Packages(&Option{IncludeName: false})

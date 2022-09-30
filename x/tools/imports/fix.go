@@ -352,6 +352,8 @@ var (
 	// scanGoPathOnce guards calling scanGoPath (for $GOPATH)
 	scanGoPathOnce sync.Once
 
+	scanGoModPathOnce sync.Once
+
 	// populateIgnoreOnce guards calling populateIgnore
 	populateIgnoreOnce sync.Once
 	ignoredDirs        []os.FileInfo
@@ -490,14 +492,28 @@ var scanGoRootDone = make(chan struct{}) // closed when scanGoRoot is done
 
 func scanGoRoot() {
 	go func() {
-		scanGoDirs(true)
+		scanGoDirs(true, nil)
 		close(scanGoRootDone)
 	}()
 }
 
-func scanGoPath() { scanGoDirs(false) }
+func scanGoPath() { scanGoDirs(false, nil) }
 
-func scanGoDirs(goRoot bool) {
+func scanGoMod() {
+	curDir, err := os.Getwd()
+	if err != nil {
+		return
+	}
+	if rootDir, ok := findGoModPath(curDir); ok {
+		scanGoDirs(false, []string{rootDir})
+	}
+}
+
+func scanGoWorkspace() {
+
+}
+
+func scanGoDirs(goRoot bool, extPath []string) {
 	if Debug {
 		which := "$GOROOT"
 		if !goRoot {
@@ -512,8 +528,15 @@ func scanGoDirs(goRoot bool) {
 	}
 	dirScanMu.Unlock()
 
-	for _, srcDir := range build.Default.SrcDirs() {
+	var srcDirs []string
+	if len(extPath) == 0 || extPath == nil {
+		srcDirs = build.Default.SrcDirs()
+	} else {
+		srcDirs = extPath
+	}
+	for _, srcDir := range srcDirs {
 		isGoroot := srcDir == filepath.Join(build.Default.GOROOT, "src")
+
 		if isGoroot != goRoot {
 			continue
 		}
@@ -975,4 +998,36 @@ func fileInDir(file, dir string) bool {
 	}
 	// Check for boundary: either nothing (file == dir), or a slash.
 	return len(rest) == 0 || rest[0] == '/' || rest[0] == '\\'
+}
+
+func findGoModPath(path string) (string, bool) {
+	if strings.Compare(path, "/") == 0 {
+		return "", false
+	}
+	rd, err := ioutil.ReadDir(path)
+	if err != nil {
+		return "", false
+	}
+	for _, fi := range rd {
+		if strings.Compare(fi.Name(), "go.mod") == 0 {
+			return path, true
+		}
+		if strings.Compare(fi.Name(), ".git") == 0 {
+			return path, true
+		}
+	}
+	return findGoModPath(getParentDirectory(path))
+}
+
+func substr(s string, pos, length int) string {
+	runes := []rune(s)
+	l := pos + length
+	if l > len(runes) {
+		l = len(runes)
+	}
+	return string(runes[pos:l])
+}
+
+func getParentDirectory(dirctory string) string {
+	return substr(dirctory, 0, strings.LastIndex(dirctory, "/"))
 }

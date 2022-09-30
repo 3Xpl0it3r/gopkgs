@@ -16,9 +16,11 @@ package imports
 
 import (
 	"errors"
+	"go/build"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 // traverseLink is a sentinel error for fastWalk, similar to filepath.SkipDir.
@@ -166,6 +168,16 @@ func (w *walker) walk(root string, runUserCallback bool) error {
 		if err != nil {
 			return err
 		}
+	}
+
+	if strings.Contains(root, build.Default.GOROOT+"/src/internal") {
+		return nil
+	}
+	if strings.Contains(root, build.Default.GOROOT+"/src/runtime") {
+		return nil
+	}
+	if strings.Contains(root, build.Default.GOROOT+"/src/cmd") {
+		return nil
 	}
 
 	return readDir(root, w.onDirEnt)
