@@ -12,7 +12,6 @@ import (
 	"go/build"
 	"go/parser"
 	"go/token"
-	"golang.org/x/mod/modfile"
 	"io/ioutil"
 	"log"
 	"os"
@@ -22,7 +21,11 @@ import (
 	"strings"
 	"sync"
 
+	"golang.org/x/mod/modfile"
+
 	"golang.org/x/tools/go/ast/astutil"
+
+	"regexp"
 )
 
 // Debug controls verbose logging.
@@ -513,11 +516,24 @@ func scanGoMod() {
 	if err != nil {
 		return
 	}
+	fileRaw = format_gomod_version(fileRaw)
 	f, err := modfile.Parse("go.mod", fileRaw, nil)
 	if err != nil {
 		panic(err)
 	}
 	scanGoDirs(false, f.Module.Mod.String(), []string{rootDir})
+}
+
+func format_gomod_version(input []byte) []byte {
+	pattern := `go\s+\d+\.\d+\.\d+`
+
+	regex := regexp.MustCompile(pattern)
+	context := string(input)
+
+	ret := regex.ReplaceAllStringFunc(context, func(match string) string {
+		return match[:len(match)-2]
+	})
+	return []byte(ret)
 }
 
 func scanGoWorkspace() {
@@ -721,7 +737,9 @@ func loadExportsGoPath(expectPackage, dir string) map[string]bool {
 // a local qualifier in an import. For example, if findImports("pkg",
 // "X") returns ("foo/bar", rename=true), then goimports adds the
 // import line:
-// 	import pkg "foo/bar"
+//
+//	import pkg "foo/bar"
+//
 // to satisfy uses of pkg.X in the file.
 var findImport func(pkgName string, symbols map[string]bool, filename string) (foundPkg string, rename bool, err error) = findImportGoPath
 
