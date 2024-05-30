@@ -521,7 +521,15 @@ func scanGoMod() {
 	if err != nil {
 		panic(err)
 	}
+
+	modRequires := []ModRequired{}
+	for _, require := range f.Require {
+		modReq := ModRequired{name: require.Mod.String(), path: require.Mod.Path}
+		modRequires = append(modRequires, modReq)
+	}
+
 	scanGoDirs(false, f.Module.Mod.String(), []string{rootDir})
+	scanGoPathForModRequires(modRequires)
 }
 
 func format_gomod_version(input []byte) []byte {
@@ -538,6 +546,87 @@ func format_gomod_version(input []byte) []byte {
 
 func scanGoWorkspace() {
 
+}
+
+// ModRequired represent modrequired
+type ModRequired struct {
+	path string // name of module
+	name string // absolute dirs
+}
+
+func scanGoPathForModRequires(requires []ModRequired) {
+	dirScanMu.Lock()
+	if dirScan == nil {
+		dirScan = make(map[string]*pkg)
+	}
+	dirScanMu.Unlock()
+
+	/* var srcDirs []string */
+	for _, mod := range requires {
+
+		srcDir := path.Join(build.Default.GOPATH, "pkg/mod", mod.name)
+		testHookScanDir(srcDir)
+
+		walkFn := func(path string, typ os.FileMode) error {
+			dir := filepath.Dir(path)
+			if typ.IsRegular() {
+				if dir == srcDir {
+					// Doesn't make sense to have regular files
+					// directly in your $GOPATH/src or $GOROOT/src.
+					return nil
+				}
+				if !strings.HasSuffix(path, ".go") {
+					return nil
+				}
+				dirScanMu.Lock()
+				if _, dup := dirScan[dir]; !dup {
+					importpath := filepath.ToSlash(dir[len(srcDir)+len("/"):])
+					dirScan[dir] = &pkg{
+						importPath: importpath,
+						dir:        dir,
+					}
+                    
+                    dirScan[dir].importPathShort = mod.path + "/" + importpath
+				}
+				dirScanMu.Unlock()
+				return nil
+			}
+			if typ == os.ModeDir {
+				base := filepath.Base(path)
+				if base == "" || base[0] == '.' || base[0] == '_' ||
+					base == "testdata" || base == "node_modules" {
+					return filepath.SkipDir
+				}
+				fi, err := os.Lstat(path)
+				if err == nil && skipDir(fi) {
+					if Debug {
+						log.Printf("skipping directory %q under %s", fi.Name(), dir)
+					}
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if typ == os.ModeSymlink {
+				base := filepath.Base(path)
+				if strings.HasPrefix(base, ".#") {
+					// Emacs noise.
+					return nil
+				}
+				fi, err := os.Lstat(path)
+				if err != nil {
+					// Just ignore it.
+					return nil
+				}
+				if shouldTraverse(dir, fi) {
+					return traverseLink
+				}
+			}
+			return nil
+		}
+		if err := fastWalk(srcDir, walkFn); err != nil {
+			log.Printf("goimports: scanning directory %v: %v", srcDir, err)
+		}
+	}
 }
 
 func scanGoDirs(goRoot bool, goMod string, extPath []string) {

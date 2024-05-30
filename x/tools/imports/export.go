@@ -1,6 +1,8 @@
 package imports
 
-import "sync"
+import (
+	"sync"
+)
 
 // export.go exports some type and func of golang.org/x/tools/imports
 
@@ -17,10 +19,10 @@ func GoPath() map[string]*Pkg {
 		return exportedGoPath
 	}
 	populateIgnoreOnce.Do(populateIgnore)
-	scanGoRootOnce.Do(scanGoRoot) // async
-	scanGoPathOnce.Do(scanGoPath)
+	/* scanGoRootOnce.Do(scanGoRoot) // async */
+	/* scanGoPathOnce.Do(scanGoPath) */
 	scanGoModPathOnce.Do(scanGoMod)
-	<-scanGoRootDone
+	/* <-scanGoRootDone */
 	dirScanMu.Lock()
 	defer dirScanMu.Unlock()
 	exportedGoPath = exportDirScan(dirScan)
