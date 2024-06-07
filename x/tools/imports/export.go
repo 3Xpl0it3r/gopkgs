@@ -9,10 +9,25 @@ import (
 var (
 	exportedGoPath   map[string]*Pkg
 	exportedGoPathMu sync.RWMutex
+	showLog          bool
+	filterGoModule   []string
+	excludeGoModule  []string
 )
 
+// ScanConfig represent scanconfig
+type ScanConfig struct {
+	ScanRoot    bool
+	PrintLog    bool
+	Filter      []string
+	ExecludeMod []string
+}
+
 // GoPath returns all importable packages (abs dir path => *Pkg).
-func GoPath() map[string]*Pkg {
+func GoPath(cfg ScanConfig) map[string]*Pkg {
+	showLog = cfg.PrintLog
+	filterGoModule = append(filterGoModule, cfg.Filter...)
+	excludeGoModule = append(excludeGoModule, cfg.ExecludeMod...)
+
 	exportedGoPathMu.Lock()
 	defer exportedGoPathMu.Unlock()
 	if exportedGoPath != nil {
@@ -22,7 +37,10 @@ func GoPath() map[string]*Pkg {
 	/* scanGoRootOnce.Do(scanGoRoot) // async */
 	/* scanGoPathOnce.Do(scanGoPath) */
 	scanGoModPathOnce.Do(scanGoMod)
-	/* <-scanGoRootDone */
+	if cfg.ScanRoot {
+		scanGoRootOnce.Do(scanGoRoot) // async
+		<-scanGoRootDone
+	}
 	dirScanMu.Lock()
 	defer dirScanMu.Unlock()
 	exportedGoPath = exportDirScan(dirScan)

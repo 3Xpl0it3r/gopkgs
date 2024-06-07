@@ -363,7 +363,9 @@ var (
 	ignoredDirs        []os.FileInfo
 
 	dirScanMu sync.RWMutex
-	dirScan   map[string]*pkg // abs dir path => *pkg
+	// abs dir path => *pkg <--------- old
+	// importPath => *pkg
+	dirScan map[string]*pkg
 )
 
 type pkg struct {
@@ -562,7 +564,18 @@ func scanGoPathForModRequires(requires []ModRequired) {
 	dirScanMu.Unlock()
 
 	/* var srcDirs []string */
+skip:
 	for _, mod := range requires {
+		for _, filter := range filterGoModule {
+			if filter != mod.path {
+				continue skip
+			}
+		}
+		for _, exclude := range excludeGoModule {
+			if exclude == mod.path {
+				continue skip
+			}
+		}
 
 		srcDir := path.Join(build.Default.GOPATH, "pkg/mod", mod.name)
 		testHookScanDir(srcDir)
@@ -579,14 +592,14 @@ func scanGoPathForModRequires(requires []ModRequired) {
 					return nil
 				}
 				dirScanMu.Lock()
-				if _, dup := dirScan[dir]; !dup {
-					importpath := filepath.ToSlash(dir[len(srcDir)+len("/"):])
+				importpath := filepath.ToSlash(dir[len(srcDir)+len("/"):])
+				importPathShort := mod.path + "/" + importpath
+				if _, dup := dirScan[importPathShort]; !dup {
 					dirScan[dir] = &pkg{
-						importPath: importpath,
-						dir:        dir,
+						importPath:      importpath,
+						dir:             dir,
+						importPathShort: importPathShort,
 					}
-                    
-                    dirScan[dir].importPathShort = mod.path + "/" + importpath
 				}
 				dirScanMu.Unlock()
 				return nil
@@ -624,7 +637,9 @@ func scanGoPathForModRequires(requires []ModRequired) {
 			return nil
 		}
 		if err := fastWalk(srcDir, walkFn); err != nil {
-			log.Printf("goimports: scanning directory %v: %v", srcDir, err)
+			if showLog {
+				log.Printf("goimports: scanning directory %v: %v", srcDir, err)
+			}
 		}
 	}
 }
@@ -669,16 +684,19 @@ func scanGoDirs(goRoot bool, goMod string, extPath []string) {
 					return nil
 				}
 				dirScanMu.Lock()
-				if _, dup := dirScan[dir]; !dup {
-					importpath := filepath.ToSlash(dir[len(srcDir)+len("/"):])
-					dirScan[dir] = &pkg{
-						importPath: importpath,
-						dir:        dir,
-					}
+				importpath := filepath.ToSlash(dir[len(srcDir)+len("/"):])
+				importPathShort := func() string {
 					if importPathShort, isVendor := vendorlessImportPath(importpath); isVendor || goMod == "" {
-						dirScan[dir].importPathShort = importPathShort
+						return importPathShort
 					} else {
-						dirScan[dir].importPathShort = goMod + "/" + importPathShort
+						return goMod + "/" + importPathShort
+					}
+				}()
+				if _, dup := dirScan[importPathShort]; !dup {
+					dirScan[importPathShort] = &pkg{
+						importPath:      importpath,
+						dir:             dir,
+						importPathShort: importPathShort,
 					}
 				}
 				dirScanMu.Unlock()
@@ -717,7 +735,9 @@ func scanGoDirs(goRoot bool, goMod string, extPath []string) {
 			return nil
 		}
 		if err := fastWalk(srcDir, walkFn); err != nil {
-			log.Printf("goimports: scanning directory %v: %v", srcDir, err)
+			if showLog {
+				log.Printf("goimports: scanning directory %v: %v", srcDir, err)
+			}
 		}
 	}
 }

@@ -3,15 +3,20 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/3Xpl0it3r/gopkgs"
 	"os"
 	"sort"
 	"strings"
+
+	"github.com/3Xpl0it3r/gopkgs"
 )
 
 var (
 	includeName = flag.Bool("include-name", false, "fill Pkg.Name which can be used with -f flag")
 	noVendor    = flag.Bool("no-vendor", false, "exclude vendor dependencies except under workDir ")
+	showlog     = flag.Bool("log", false, "print logs")
+	enableRoot  = flag.Bool("enable-root", false, "scan goroot")
+	filter      = flag.String("filter", "", "display mode that match filters")
+	exclude     = flag.String("exclude", "", "skip scan mod")
 )
 
 var usageInfo = `
@@ -102,6 +107,17 @@ func main() {
 
 	opt := gopkgs.DefaultOption()
 	opt.IncludeName = *includeName
+
+	if *filter != "" {
+		modes := strings.Split(*filter, ",")
+		opt.Filter = modes
+	}
+
+	if *exclude != "" {
+		modes := strings.Split(*exclude, ",")
+		opt.ExecludeMod = modes
+	}
+
 	pkgs := gopkgs.Packages(opt)
 
 	sort.Sort(ByPath(pkgs))

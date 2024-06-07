@@ -24,12 +24,30 @@ type Pkg struct {
 type Option struct {
 	// Fill package name in Pkg struct if it's true. Note that it needs to parse
 	// package directory to get package name and it takes some costs.
-	IncludeName bool
+	IncludeName  bool
+	PrintLog     bool
+	EnableGoRoot bool
+	Filter       []string
+	ExecludeMod     []string
 }
 
 func DefaultOption() *Option {
 	return &Option{
-		IncludeName: false,
+		IncludeName:  false,
+		PrintLog:     false,
+		EnableGoRoot: false,
+		Filter:       []string{},
+		ExecludeMod:     []string{},
+	}
+}
+
+// Config [#TODO](should add some comments)
+func (o *Option) Config() imports.ScanConfig {
+	return imports.ScanConfig{
+		ScanRoot: o.EnableGoRoot,
+		PrintLog: o.PrintLog,
+		Filter:   o.Filter,
+		ExecludeMod: o.ExecludeMod,
 	}
 }
 
@@ -37,7 +55,8 @@ func DefaultOption() *Option {
 // Packages uses [golang.org/x/tools/cmd/goimports](https://godoc.org/golang.org/x/tools/cmd/goimports) implementation internally, so it's fast.
 // e.g. it cares .goimportsignore
 func Packages(opt *Option) []*Pkg {
-	gp := imports.GoPath()
+
+	gp := imports.GoPath(opt.Config())
 	pkgs := make([]*Pkg, len(gp))
 	i := 0
 	for _, p := range gp {
